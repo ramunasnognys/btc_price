@@ -1,6 +1,8 @@
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 def get_btc_price(currencies=['usd', 'nok']):
     """Fetch current Bitcoin price from CoinGecko API for specified currencies
@@ -54,6 +56,39 @@ def get_btc_price(currencies=['usd', 'nok']):
         print(f'Error parsing response: {e}')
         return None
 
+def get_historical_prices(currency='usd', days=7):
+    """Fetch historical Bitcoin prices from CoinGecko API
+    
+    Args:
+        currency (str): Currency code (e.g., 'usd', 'nok')
+        days (int): Number of days of historical data to fetch
+        
+    Returns:
+        tuple: Lists of dates and prices
+    """
+    try:
+        url = f'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart'
+        params = {
+            'vs_currency': currency,
+            'days': days,
+            'interval': 'daily'
+        }
+        
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        
+        data = response.json()
+        prices = data['prices']
+        
+        dates = [datetime.fromtimestamp(price[0]/1000) for price in prices]
+        price_values = [price[1] for price in prices]
+        
+        return dates, price_values
+        
+    except (requests.RequestException, KeyError, json.JSONDecodeError) as e:
+        print(f'Error fetching historical prices: {e}')
+        return None, None
+
 def format_currency(amount, currency):
     """Format currency amount with appropriate symbol
     
@@ -72,9 +107,41 @@ def format_currency(amount, currency):
     else:
         return f'{amount:,.2f} {currency.upper()}'
 
+def plot_price_history(currency='usd', days=7):
+    """Plot Bitcoin price history using matplotlib
+    
+    Args:
+        currency (str): Currency code (e.g., 'usd', 'nok')
+        days (int): Number of days of historical data to plot
+    """
+    dates, prices = get_historical_prices(currency, days)
+    
+    if dates and prices:
+        plt.figure(figsize=(10, 6))
+        plt.plot(dates, prices, 'b-', linewidth=2)
+        
+        # Configure the plot
+        plt.title(f'Bitcoin Price History ({currency.upper()})')
+        plt.xlabel('Date')
+        plt.ylabel(f'Price ({currency.upper()})')
+        
+        # Format x-axis to show dates nicely
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.gcf().autofmt_xdate()  # Rotate and align the tick labels
+        
+        # Add grid
+        plt.grid(True, linestyle='--', alpha=0.7)
+        
+        # Customize the y-axis format
+        plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: format_currency(x, currency)))
+        
+        plt.tight_layout()
+        plt.show()
+
 def main():
     """Main function to demonstrate the Bitcoin price fetcher"""
-    btc_data = get_btc_price(['usd', 'nok'])
+    currencies = ['usd', 'nok']
+    btc_data = get_btc_price(currencies)
     
     if btc_data:
         print('\nBitcoin Price Information:')
@@ -84,6 +151,10 @@ def main():
             print(f'Price ({currency.upper()}): {format_currency(data["price"], currency)}')
             print(f'24h Change: {data["change_24h"]:,.2f}%')
             print()
+        
+        # Plot price history for USD
+        print("Generating price history plot...")
+        plot_price_history('usd', days=7)
 
 if __name__ == '__main__':
     main()
